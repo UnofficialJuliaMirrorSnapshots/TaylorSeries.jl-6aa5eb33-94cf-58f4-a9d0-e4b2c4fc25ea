@@ -28,12 +28,8 @@ eeuler = Base.MathConstants.e
     @test iterate(t) == (0.0, 1)
     @test iterate(t, 1) == (1.0, 2)
     @test iterate(t, 16) == nothing
-
-    # ta = Taylor1([1,2,3,4,5])
-    # vT = [h for h in ta]
-    # voT = [h.order for h in Taylor1([1,2,3,4,5])]
-    # @test vT == [Taylor1(1,0), Taylor1(2,1), Taylor1(3,2), Taylor1(4,3), Taylor1(5,4)]
-    # @test voT == [0, 1, 2, 3, 4]
+    @test axes(t) == ()
+    @test axes([t]) == (Base.OneTo(1),)
 
     v = [1,2]
     @test typeof(TaylorSeries.resize_coeffs1!(v,3)) == Nothing
@@ -43,14 +39,20 @@ eeuler = Base.MathConstants.e
     TaylorSeries.resize_coeffs1!(v,3)
     setindex!(Taylor1(v),3,2)
     @test v == [1,0,3,0]
-    @test Taylor1(v)[:] == [1,0,3,0]
-    @test Taylor1(v)[:] == Taylor1(v).coeffs[:]
-    setindex!(Taylor1(v),0,0:2)
+    pol_int = Taylor1(v)
+    @test pol_int[:] == [1,0,3,0]
+    @test pol_int[:] == pol_int.coeffs[:]
+    @test pol_int[1:2:3] == pol_int.coeffs[2:2:4]
+    setindex!(pol_int,0,0:2)
     @test v == zero(v)
-    setindex!(Taylor1(v),1,:)
+    setindex!(pol_int,1,:)
     @test v == ones(Int, 4)
-    Taylor1(v)[:] = 0
+    pol_int[:] .= 0
     @test v == zero(v)
+    pol_int[0:2:end] = 2
+    @test all(v[1:2:end] .== 2)
+    pol_int[0:2:3] = [0, 1]
+    @test all(v[1:2:3] .== [0, 1])
     rv = [rand(0:3) for i in 1:4]
     @test Taylor1(rv)[:] == rv
     y = sin(Taylor1(16))
@@ -60,16 +62,16 @@ eeuler = Base.MathConstants.e
     @test y[:] == cos(Taylor1(16))[:]
     y = sin(Taylor1(16))
     rv = rand(5)
-    y[0:4] = rv
+    y[0:4] .= rv
     @test y[0:4] == rv
     @test y[5:end] == y.coeffs[6:end]
     rv = rand( length(y.coeffs) )
-    y[:] = rv
+    y[:] .= rv
     @test y[:] == rv
-    y[:] = cos(Taylor1(16)).coeffs
+    y[:] .= cos(Taylor1(16)).coeffs
     @test y == cos(Taylor1(16))
     @test y[:] == cos(Taylor1(16))[:]
-    y[:] = 0.0
+    y[:] .= 0.0
     @test y[:] == zero(y[:])
     y = sin(Taylor1(16))
     rv = rand.(length(0:4))
@@ -77,8 +79,13 @@ eeuler = Base.MathConstants.e
     @test y[0:4] == rv
     @test y[6:end] == sin(Taylor1(16))[6:end]
     rv = rand.(length(y))
-    y[:] = rv
+    y[:] .= rv
     @test y[:] == rv
+    y[0:4:end] .= 1.0
+    @test all(y.coeffs[1:4:end] .== 1.0)
+    y[0:2:8] .= rv[1:5]
+    @test y.coeffs[1:2:9] == rv[1:5]
+    @test_throws AssertionError y[0:2:3] = rv
 
     @test Taylor1([0,1,0,0]) == Taylor1(3)
     @test getcoeff(Taylor1(Complex{Float64},3),1) == complex(1.0,0.0)
@@ -118,11 +125,11 @@ eeuler = Base.MathConstants.e
     @test constant_term(2.0) == 2.0
     @test constant_term(t) == 0
     @test constant_term(tim) == complex(0, 0)
-    @test constant_term([zt, t]) == zt
+    @test constant_term([zt, t]) == [0, 0]
     @test linear_polynomial(2) == 2
     @test linear_polynomial(t) == t
     @test linear_polynomial(tim^2) == zero(tim)
-    @test linear_polynomial([zero(tim), tim]) == zero(tim)
+    @test linear_polynomial([zero(tim), tim]) == [zero(tim), tim]
 
     @test ot == 1
     @test 0.0 == zt
@@ -246,15 +253,15 @@ eeuler = Base.MathConstants.e
     @test a.() == [p(), q()]
     @test a.() == a()
     vr = rand(2)
-    @test p.(vr) == evaluate.(p, vr)
+    @test p.(vr) == evaluate.([p], vr)
     Mr = rand(3,3,3)
-    @test p.(Mr) == evaluate.(p, Mr)
+    @test p.(Mr) == evaluate.([p], Mr)
     mytaylor1 = Taylor1(rand(20))
     vr = rand(5)
     @test p(vr) == p.(vr)
-    @test p(vr) == evaluate.(p,vr)
+    @test p(vr) == evaluate.([p],vr)
     @test p(Mr) == p.(Mr)
-    @test p(Mr) == evaluate.(p,Mr)
+    @test p(Mr) == evaluate.([p], Mr)
     taylor_a = Taylor1(Int,10)
     taylor_x = exp(Taylor1(Float64,13))
     @test taylor_x(taylor_a) == evaluate(taylor_x, taylor_a)
@@ -473,22 +480,22 @@ eeuler = Base.MathConstants.e
     TaylorSeries.deg2rad!(b, a, 0)
     @test a == c
     @test a[0]*(pi/180) == b[0]
-    TaylorSeries.deg2rad!.(b, a, [0,1,2])
-    @test a == c
-    for i in 0:2
-        @test a[i]*(pi/180) == b[i]
-    end
+    # TaylorSeries.deg2rad!.(b, a, [0,1,2])
+    # @test a == c
+    # for i in 0:2
+    #     @test a[i]*(pi/180) == b[i]
+    # end
     a = Taylor1(rand(10))
     b = Taylor1(rand(10))
     c = deepcopy(a)
     TaylorSeries.rad2deg!(b, a, 0)
     @test a == c
     @test a[0]*(180/pi) == b[0]
-    TaylorSeries.rad2deg!.(b, a, [0,1,2])
-    @test a == c
-    for i in 0:2
-        @test a[i]*(180/pi) == b[i]
-    end
+    # TaylorSeries.rad2deg!.(b, a, [0,1,2])
+    # @test a == c
+    # for i in 0:2
+    #     @test a[i]*(180/pi) == b[i]
+    # end
 
     # Test additional Taylor1 constructors
     @test Taylor1{Float64}(true) == Taylor1([1.0])
